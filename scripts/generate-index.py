@@ -43,7 +43,7 @@ def render_marketplace(skills: list[dict]) -> str:
             data = {}
     data["name"] = data.get("name", "my-daily-skills")
     data["description"] = data.get("description", "我的日常技能市场。")
-    data["owner"] = data.get("owner", {"name": "hhtczengjing"})
+    data["owner"] = data.get("owner", {"name": "zengjing"})
     data["plugins"] = build_plugins(skills)
     return json.dumps(data, ensure_ascii=False, indent=2) + "\n"
 
