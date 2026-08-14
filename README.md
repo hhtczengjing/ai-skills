@@ -29,8 +29,7 @@
 <!-- SKILLS-TABLE:START -->
 | 技能 | 目录 | 分类 | 说明 |
 |------|------|------|------|
-| `chinese-doc-polish` | `skills/chinese-doc-polish` | writing | 润色中文文档、周报、邮件，修正语病与标点，统一术语，使表达更简洁专业。当用户要求「润色」「改写」「帮我看看这段文字」时使用。 |
-| `git-commit-message` | `skills/git-commit-message` | dev | 根据 git diff 与提交历史，按 Conventional Commits 规范生成中文提交信息，并提供交互式选择。当用户说「帮我写 commit」「生成提交信息」「提交一下」时使用。 |
+| `drawio-designer` | `skills/drawio-designer` | diagram | 创建、编辑和管理 draw.io XML 图表，支持转换为 PNG，集成 AWS、K8s 及通用 IT 图标。当用户要求「画架构图」「画流程图」「生成 drawio 图」「修改 drawio 图」时使用。 |
 <!-- SKILLS-TABLE:END -->
 
 ## 新增技能
