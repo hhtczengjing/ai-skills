@@ -7,7 +7,7 @@
 在 Claude Code 中：
 
 ```
-/plugin marketplace add zengjing/ai-skills
+/plugin marketplace add hhtczengjing/ai-skills
 ```
 
 安装全部技能（bundle）：
