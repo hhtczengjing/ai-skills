@@ -10,16 +10,10 @@
 /plugin marketplace add hhtczengjing/ai-skills
 ```
 
-安装全部技能（bundle）：
+按需安装单个技能：
 
 ```
-/plugin install my-daily-skills-bundle
-```
-
-或按需安装单个技能：
-
-```
-/plugin install git-commit-message
+/plugin install ios-webview-preview
 ```
 
 > 也支持其他遵循 Agent Skills 格式的客户端：直接 `git clone` 后把 `skills/` 下的目录加入你的 skills 路径。

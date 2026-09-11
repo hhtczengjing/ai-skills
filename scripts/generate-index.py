@@ -20,18 +20,11 @@ TABLE_END = "<!-- SKILLS-TABLE:END -->"
 
 
 def build_plugins(skills: list[dict]) -> list[dict]:
-    plugins = [{
-        "name": "my-daily-skills-bundle",
-        "source": "./",
-        "description": "一次安装全部技能。",
-    }]
-    for s in skills:
-        plugins.append({
-            "name": s["name"],
-            "source": f"./skills/{s['dir']}",
-            "description": s["description"],
-        })
-    return plugins
+    return [{
+        "name": s["name"],
+        "source": f"./skills/{s['dir']}",
+        "description": s["description"],
+    } for s in skills]
 
 
 def render_marketplace(skills: list[dict]) -> str:
