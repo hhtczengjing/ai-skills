@@ -30,6 +30,7 @@
 | 技能 | 目录 | 分类 | 说明 |
 |------|------|------|------|
 | `drawio-designer` | `skills/drawio-designer` | diagram | 创建、编辑和管理 draw.io XML 图表，支持转换为 PNG，集成 AWS、K8s 及通用 IT 图标。当用户要求「画架构图」「画流程图」「生成 drawio 图」「修改 drawio 图」时使用。 |
+| `ios-webview-preview` | `skills/ios-webview-preview` | ios | 当用户需要「预览 H5」「iOS 预览」「WebView 预览」「模拟器预览」本地 localhost 网页时使用。给定 URL，自动编译 iOS WebView App 并在指定模拟器上运行。支持 http/https，导航栏标题跟随网页 title，返回按钮支持 goBack。 |
 <!-- SKILLS-TABLE:END -->
 
 ## 新增技能

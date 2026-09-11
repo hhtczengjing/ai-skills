@@ -1,0 +1,25 @@
+name: WebViewPreview
+options:
+  deploymentTarget:
+    iOS: "15.0"
+  generateEmptyDirectories: true
+  groupSortPosition: top
+
+targets:
+  WebViewPreview:
+    type: application
+    platform: iOS
+    sources:
+      - path: WebViewPreview
+    settings:
+      base:
+        INFOPLIST_FILE: WebViewPreview/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.devzeng.yidingcheng
+        PRODUCT_NAME: 壹定橙
+        MARKETING_VERSION: 1.0
+        CURRENT_PROJECT_VERSION: 1
+        SWIFT_VERSION: "5.0"
+        DEVELOPMENT_TEAM: ""
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: ""
+        TARGETED_DEVICE_FAMILY: "1,2"
