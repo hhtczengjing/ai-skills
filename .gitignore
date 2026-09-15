@@ -30,3 +30,8 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# TTS Recording skill 生成产物
+tts-output/
+*.aiff
+*_work/
