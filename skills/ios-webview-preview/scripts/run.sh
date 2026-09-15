@@ -53,4 +53,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# 注意：template/example/*.user.js 是开发 skill 时验证 native 扩展的测试脚本，
+# 不是给最终用户用的。run.sh 不自动注入；需要时手动：
+#   bash scripts/install-test-scripts.sh
 echo "App launched successfully on simulator"

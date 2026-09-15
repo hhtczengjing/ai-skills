@@ -33,17 +33,6 @@ enum ScriptStore {
         }
     }
 
-    /// 首次启动时往沙箱里塞一份 vConsole 用户脚本 —— 当作普通 Script 存，
-    /// 用户在「用户脚本」列表里能直接看到、能编辑、能删除、开关走默认
-    /// `enabled=false` 流程。
-    ///
-    /// **已废弃**：内置脚本现在走 BuiltinScripts 虚拟列表（source 从 bundle
-    /// 读，不写沙箱），不再预置 .js 到 Documents/scripts/。保留方法签名是给
-    /// 老的调用方兜底，内部 no-op。
-    static func seedInitialScriptsIfNeeded() {
-        // no-op：内置脚本现在走 BuiltinScripts 虚拟列表，不再预置到沙箱。
-    }
-
     // MARK: - CRUD
 
     /// 读所有脚本。沙箱里的用户脚本 + 内置脚本（BuiltinScripts）合并返回。
@@ -70,9 +59,24 @@ enum ScriptStore {
 
         if data.isEmpty { return [] }
 
+        // 自定义 Date 解码：兼容 epoch Double 和 ISO 8601 字符串。
+        // 默认 `.deferredToDate` 只认 Double —— 有人写 ISO 字符串会让整个
+        // index.json decode 失败，`loadUserScripts()` catch 后静默返回 []，
+        // 用户脚本全部失踪（连「自定义脚本」section 都不显示）。自己吃两种格式，
+        // 出错信息也更明确。
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { dec in
+            let c = try dec.singleValueContainer()
+            if let s = try? c.decode(String.self), let d = ISO8601DateFormatter().date(from: s) {
+                return d
+            }
+            let n = try c.decode(Double.self)
+            return Date(timeIntervalSince1970: n)
+        }
+
         let all: [Script]
         do {
-            all = try JSONDecoder().decode([Script].self, from: data)
+            all = try decoder.decode([Script].self, from: data)
         } catch {
             print("[ScriptStore] index.json corrupted, treating as empty: \(error)")
             return []

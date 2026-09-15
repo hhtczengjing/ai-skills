@@ -4,6 +4,7 @@ import WebKit
 class WebViewController: UIViewController {
     private var webView: WKWebView!
     private var userContentController: WKUserContentController!
+    private let appNativeHandler = AppNativeMessageHandler()
     private var targetURL: URL
     private var backButton: UIBarButtonItem!
     private var canGoBackObservation: NSKeyValueObservation?
@@ -41,6 +42,8 @@ class WebViewController: UIViewController {
         config.allowsInlineMediaPlayback = true
 
         userContentController = WKUserContentController()
+        appNativeHandler.owner = self
+        userContentController.add(appNativeHandler, name: "appNative")
         applyUserScripts(to: userContentController)
         config.userContentController = userContentController
 
@@ -164,6 +167,16 @@ class WebViewController: UIViewController {
     }
 
     private func applyUserScripts(to ucc: WKUserContentController) {
+        // 1) $app native 扩展 shim（AppNativeRegistry 自动拼装所有已注册插件）：
+        //    必须在所有用户脚本之前注入 (.atDocumentStart 早于 .atDocumentEnd，
+        //    且 WKUserScript 按数组顺序执行)。
+        ucc.addUserScript(WKUserScript(
+            source: AppNativeRegistry.shimSource,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        ))
+
+        // 2) 用户/内置脚本（原逻辑不变）
         for script in ScriptStore.loadAll() {
             // 用户脚本：enabled 字段就是真实状态
             // 内置脚本：状态在 UserDefaults 里（builtin-<id>-enabled）
@@ -177,6 +190,35 @@ class WebViewController: UIViewController {
                 forMainFrameOnly: false
             ))
         }
+    }
+
+    // MARK: - $app native 扩展 dispatch（纯 plumbing，转发给 AppNativeRegistry）
+
+    /// AppNativeMessageHandler 入口。`internal`（非 `fileprivate`）以便另一个文件的
+    /// `AppNativeMessageHandler` 调用。在主线程上调用（WKScriptMessageHandler 文档约束）。
+    func handleAppNativeMessage(id: Int,
+                                module: String,
+                                action: String,
+                                payload: [String: Any]) {
+        guard let webView = self.webView else {
+            AppNativeRegistry.sendReply(to: nil, id: id,
+                                        reply: AppNativeReply(ok: false, error: "no_webview"))
+            return
+        }
+        AppNativeRegistry.dispatch(
+            id: id, module: module, action: action, payload: payload,
+            webView: webView,
+            reply: { [weak self] appReply in
+                AppNativeRegistry.sendReply(to: self?.webView, id: id, reply: appReply)
+            }
+        )
+    }
+
+    /// 消息 body 解析失败时的兜底入口。`internal` 以便 AppNativeMessageHandler 调用。
+    func handleAppNativeError(id: Int?) {
+        guard let id = id else { return }
+        AppNativeRegistry.sendReply(to: webView, id: id,
+                                    reply: AppNativeReply(ok: false, error: "invalid_args"))
     }
 
     @objc private func handleNavBarLongPress(_ gesture: UILongPressGestureRecognizer) {

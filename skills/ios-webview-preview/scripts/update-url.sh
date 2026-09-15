@@ -3,7 +3,8 @@
 # Update the target URL in Config.swift
 
 WORK_DIR="$HOME/.ios-webview-preview"
-CONFIG_FILE="$WORK_DIR/WebViewPreview/Config.swift"
+# Config.swift 位于 App/ 子目录（重构后的目录结构）。
+CONFIG_FILE="$WORK_DIR/WebViewPreview/App/Config.swift"
 NEW_URL="$1"
 
 if [ -z "$NEW_URL" ]; then

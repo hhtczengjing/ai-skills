@@ -27,7 +27,7 @@ xcodebuild -project WebViewPreview.xcodeproj -scheme WebViewPreview \
 
 ## 修改预览 URL
 
-`WebViewPreview/Config.swift` 里的 `AppConfig.targetURL` 是默认值。skill 在调用时会自动替换这个值。运行后也可以**长按导航栏标题**直接弹出输入框改 URL。
+`WebViewPreview/App/Config.swift` 里的 `AppConfig.targetURL` 是默认值。skill 在调用时会自动替换这个值。运行后也可以**长按导航栏标题**直接弹出输入框改 URL。
 
 ## 用户脚本（油猴风格）
 
@@ -60,24 +60,38 @@ Documents/scripts/
 
 ## 目录
 
+Swift 代码按职责拆成 4 个子目录（xcodegen `path: WebViewPreview` 递归包含，子目录自动映射成 Xcode groups）。
+
 ```
 .
 ├── project.yml                      xcodegen 配置
+├── example/                         测试用 userscript（仅 skill 开发时手动注入；不会自动跑）
+│   └── cookieBridge-e2e.user.js
 ├── WebViewPreview/
-│   ├── AppDelegate.swift
-│   ├── SceneDelegate.swift
-│   ├── WebViewController.swift      核心：WKWebView + 导航栏 + 返回/刷新 + 齿轮入口
-│   ├── Config.swift                 targetURL（被 skill 改写）
-│   ├── Script.swift                 用户脚本数据模型（含油猴默认模板）
-│   ├── ScriptMetadata.swift         油猴头部注释解析
-│   ├── ScriptStore.swift            持久化（Documents/scripts/index.json + <id>.js）
-│   ├── ScriptInjector.swift         IIFE + try/catch 包装
-│   ├── SettingsViewController.swift 脚本列表
-│   ├── ScriptEditorViewController.swift 脚本编辑器（Monaco + 元数据自动提取）
-│   ├── CodeEditorView.swift         WKWebView + Monaco 桥
+│   ├── App/                         App 生命周期 + Config
+│   │   ├── AppDelegate.swift
+│   │   ├── SceneDelegate.swift
+│   │   └── Config.swift             targetURL（被 skill 改写）
+│   ├── WebView/                     WKWebView 容器（纯 plumbing，~200 行）
+│   │   └── WebViewController.swift  核心：WKWebView + 导航栏 + 返回/刷新 + 齿轮入口
+│   ├── NativeExtensions/            $app 插件系统
+│   │   ├── AppNativePlugin.swift    插件协议 + AppNativeReply
+│   │   ├── AppNativeRegistry.swift  注册表 + shim builder + dispatch + handler
+│   │   └── CookieBridge.swift       $app.cookie 插件实现（跨域 cookie 桥）
+│   ├── UserScripts/                 用户脚本（油猴风格）运行时
+│   │   ├── Script.swift                 数据模型（含油猴默认模板）
+│   │   ├── ScriptMetadata.swift         油猴头部注释解析
+│   │   ├── ScriptStore.swift            持久化（Documents/scripts/index.json + <id>.js）
+│   │   ├── ScriptInjector.swift         IIFE + try/catch 包装
+│   │   ├── BuiltinScripts.swift         内置脚本虚拟列表（source 从 bundle 读）
+│   │   ├── SettingsViewController.swift 脚本列表
+│   │   ├── ScriptEditorViewController.swift 脚本编辑器（Monaco + 元数据自动提取）
+│   │   └── CodeEditorView.swift         WKWebView + Monaco 桥
 │   ├── Resources/Monaco/
 │   │   ├── editor.html              Monaco 宿主页
 │   │   └── js/vs/...                Monaco AMD bundle（裁剪后 ~4 MB）
+│   ├── Resources/Scripts/
+│   │   └── vconsole.user.js         内置 JS 源（BuiltinScript 读它）
 │   ├── Info.plist
 │   └── Assets.xcassets/
 │       ├── AppIcon.appiconset/
@@ -86,6 +100,10 @@ Documents/scripts/
 │       └── AccentColor.colorset/
 └── README.md
 ```
+
+## 测试插件
+
+`example/` 下的 `*.user.js` 是开发 skill / native 扩展时的端到端测试脚本，**不会自动跑**。手动注入到 App 沙箱 `Documents/scripts/`（用 `scripts/install-test-scripts.sh`），在 Settings → 用户脚本 里打开开关后，断言结果打到 Xcode console 或 Safari Web Inspector。
 
 ## Bundle / 签名
 
