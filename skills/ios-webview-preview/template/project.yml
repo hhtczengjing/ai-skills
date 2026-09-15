@@ -11,6 +11,22 @@ targets:
     platform: iOS
     sources:
       - path: WebViewPreview
+        excludes:
+          - "**/.DS_Store"
+          - "Resources/**"
+      # Monaco Editor bundle (AMD) is vendored as a folder reference so the
+      # whole tree lands in WebViewPreview.app/Monaco/ and is loaded by the
+      # WKWebView via loadFileURL at runtime.
+      - path: WebViewPreview/Resources/Monaco
+        type: folder
+        buildPhase: resources
+      # 内置脚本的源文件（每个 .user.js 对应「内置脚本」段里的一条）。运行时
+      # BuiltinScripts 从 Bundle.main 读出 source 拼成 WKUserScript —— 这些
+      # 脚本**不**写进沙箱，纯粹虚拟，用户无法编辑也无法删除（SettingsViewController
+      # 检测到 builtin id 会把左滑删除和「保存」按钮都禁掉）。
+      - path: WebViewPreview/Resources/Scripts
+        type: folder
+        buildPhase: resources
     settings:
       base:
         INFOPLIST_FILE: WebViewPreview/Info.plist
