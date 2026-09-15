@@ -6,9 +6,23 @@ Usage:
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
+from pathlib import Path
 
 from common import MARKETPLACE_PATH, NAME_RE, SKILLS_DIR, parse_frontmatter
+
+
+def find_untracked_under_skills() -> list[str]:
+    """列出 skills/ 下未 git add 的文件，提醒新文件没入库。"""
+    try:
+        out = subprocess.check_output(
+            ["git", "ls-files", "--others", "--exclude-standard", "--", "skills/"],
+            cwd=SKILLS_DIR.parent, stderr=subprocess.DEVNULL, text=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return []  # 不在 git 仓库里就跳过
+    return [line.strip() for line in out.splitlines() if line.strip()]
 
 
 def main() -> None:
@@ -62,6 +76,14 @@ def main() -> None:
                 )
     else:
         errors.append("缺少 .claude-plugin/marketplace.json")
+
+    # 提醒 skills/ 下未 add 的文件（新增文件忘了 git add 会漏发布）
+    untracked = find_untracked_under_skills()
+    if untracked:
+        errors.append(
+            "skills/ 下有未 git add 的文件（先 `git add` 再提交）：\n  "
+            + "\n  ".join(untracked)
+        )
 
     if errors:
         print("❌ 校验失败：")
