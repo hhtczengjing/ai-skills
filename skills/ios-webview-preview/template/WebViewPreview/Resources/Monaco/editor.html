@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Editor</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #fff; overflow: hidden; height: 100%; width: 100%; }
+  #container { position: fixed; top: 0; left: 0; right: 0; bottom: 0; }
+</style>
+</head>
+<body>
+<div id="container"></div>
+<script>
+  // Forward console output to Swift so we can see JS errors in the Xcode console.
+  (function () {
+    function post(level, args) {
+      try {
+        var msg = level + ':' + Array.prototype.slice.call(args).map(function (a) {
+          if (typeof a === 'string') return a;
+          try { return JSON.stringify(a); } catch (e) { return String(a); }
+        }).join(' ');
+        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.console) {
+          window.webkit.messageHandlers.console.postMessage(msg);
+        }
+      } catch (e) {}
+    }
+    ['log', 'warn', 'error'].forEach(function (lvl) {
+      var orig = console[lvl];
+      console[lvl] = function () { post(lvl, arguments); return orig.apply(console, arguments); };
+    });
+    window.addEventListener('error', function (e) {
+      post('error', ['[uncaught]', e.message, e.filename + ':' + e.lineno]);
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      post('error', ['[unhandledrejection]', String(e.reason)]);
+    });
+  })();
+
+  // WKWebView 在 file:// 下无法创建 Web Worker。我们裁掉了 TS/JSON/HTML
+  // 等带 worker 的语言服务，所以这里直接把 getWorker 返回成一个 noop worker。
+  // 关键：必须返回 **Promise**，而不是同步 null —— Monaco 的 WorkerManager
+  // 拿到返回值后直接 .then(...)（不是 await），所以同步 return null 会被
+  // 解析成 "null is not an object (evaluating 'i.then')"，把整个 worker 加载
+  // 链路炸掉，导致编辑器事件循环被破坏、无法输入。
+  self.MonacoEnvironment = {
+    getWorker: function () {
+      return new Promise(function (resolve) {
+        resolve({
+          postMessage: function () {},
+          terminate: function () {},
+          addEventListener: function () {},
+          removeEventListener: function () {}
+        });
+      });
+    }
+  };
+
+  // Swift calls window.setSource(s) at any time. If the editor isn't ready
+  // yet, cache and flush on ready — avoids races between viewDidLoad and
+  // Monaco's async initialization.
+  window.__pendingValue = null;
+  window.setSource = function (s) {
+    if (window.__editor) {
+      window.__editor.setValue(s == null ? '' : String(s));
+      reflow();
+    } else {
+      window.__pendingValue = s == null ? '' : String(s);
+    }
+  };
+  window.getSource = function () {
+    return window.__editor ? window.__editor.getValue() : (window.__pendingValue || '');
+  };
+
+  // 始终读 container 的**当前**尺寸。之前的实现把 w/h 一次性缓存到闭包里，
+  // 导致 WKWebView 在 init 里早于外层 layout 触发 loadHTMLString 时拿到 0,
+  // 后续所有 reflow 仍然传 0 — Monaco 只渲染 1 行高度,用户看到的"无法输入"
+  // 其实是 Monaco 几乎不可见。
+  function currentSize() {
+    var c = document.getElementById('container');
+    var w = c ? c.clientWidth : window.innerWidth;
+    var h = c ? c.clientHeight : window.innerHeight;
+    // fallback 到 window 防止 container 还没布局时尺寸为 0
+    if (!w || w < 1) w = window.innerWidth || document.documentElement.clientWidth || 0;
+    if (!h || h < 1) h = window.innerHeight || document.documentElement.clientHeight || 0;
+    return { width: w, height: h };
+  }
+  function reflow() {
+    if (!window.__editor) return;
+    window.__editor.layout(currentSize());
+  }
+</script>
+<script src="js/vs/loader.js"></script>
+<script>
+  require.config({ paths: { vs: 'js/vs' } });
+
+  require(['vs/editor/editor.main'], function () {
+    // JS 语法高亮：手动注册 javascript 语言 + inline Monarch tokenizer，避开
+    // 走 Monaco 内置的语言 worker（worker 在 file:// 下用不了，fallback 会
+    // 把 view 渲染卡死）。inline 而不是 require vs/basic-languages/javascript，
+    // 是因为那个 AMD 模块的 define 写成了 ["require","require"]，loader 会报
+    // 错导致回调永远不触发。inline 是同步的，Monarch tokenizer 也同步在主线程
+    // 跑，够油猴脚本用。
+    monaco.languages.register({ id: 'javascript', extensions: ['.js'], aliases: ['JavaScript', 'javascript'] });
+    monaco.languages.setMonarchTokensProvider('javascript', {
+      defaultToken: '',
+      tokenPostfix: '.js',
+      keywords: [
+        'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger',
+        'default', 'delete', 'do', 'else', 'export', 'extends', 'false',
+        'finally', 'for', 'from', 'function', 'if', 'import', 'in',
+        'instanceof', 'let', 'new', 'null', 'return', 'super', 'switch',
+        'symbol', 'this', 'throw', 'true', 'try', 'typeof', 'var', 'void',
+        'while', 'with', 'yield', 'async', 'await', 'of', 'static'
+      ],
+      tokenizer: {
+        root: [
+          [/\/\/.*$/, 'comment'],
+          [/\/\*/, 'comment', '@comment'],
+          [/"([^"\\]|\\.)*"/, 'string'],
+          [/'([^'\\]|\\.)*'/, 'string'],
+          [/`([^`\\]|\\.)*`/, 'string'],
+          [/\d*\.\d+([eE][\-+]?\d+)?/, 'number.float'],
+          [/0[xX][0-9a-fA-F]+/, 'number.hex'],
+          [/\d+/, 'number'],
+          [/[a-zA-Z_$][\w$]*/, {
+            cases: { '@keywords': 'keyword', '@default': 'identifier' }
+          }],
+          [/[{}()\[\]]/, '@brackets'],
+          [/[<>](?!@symbols)/, '@brackets'],
+          [/@symbols/, {
+            cases: { '@operators': 'delimiter', '@default': '' }
+          }],
+          [/[;,.]/, 'delimiter']
+        ],
+        comment: [
+          [/[^\/*]+/, 'comment'],
+          [/\*\//, 'comment', '@pop'],
+          [/[\/*]/, 'comment']
+        ]
+      },
+      symbols: /[=><!~?:&|+\-*\/\^%]+/,
+      operators: ['<=', '>=', '==', '!=', '===', '!==', '=>', '+', '-',
+        '**', '*', '/', '%', '++', '--', '<<', '>>', '>>>', '&', '|', '^',
+        '!', '~', '&&', '||', '??', '?', ':', '=', '+=', '-=', '*=',
+        '**=', '/=', '%=', '<<=', '>>=', '>>>=', '&=', '|=', '^=', '@']
+    });
+
+    var c = document.getElementById('container');
+    var initialSize = currentSize();
+    window.__editor = monaco.editor.create(c, {
+      value: window.__pendingValue || '',
+      // 创建时**不**设 language —— setModelLanguage 在 Monaco ready 后调
+      // 用，否则 Monaco 会尝试加载内置的语言 worker，把 tokenization 流程挂住。
+      theme: 'vs',
+      fontFamily: '"SF Mono", Menlo, monospace',
+      fontSize: 14,
+      // automaticLayout 让 Monaco 自己监听 container 尺寸变化再 layout。
+      // 配合外部多次 reflow,WKWebView 早期 layout 不稳的问题彻底解决。
+      automaticLayout: true,
+      minimap: { enabled: false },
+      scrollBeyondLastLine: false,
+      tabSize: 2,
+      insertSpaces: true,
+      renderWhitespace: 'none',
+      renderLineHighlight: 'all',
+      'semanticHighlighting.enabled': false,
+      quickSuggestions: false,
+      suggestOnTriggerCharacters: false,
+      parameterHints: { enabled: false },
+      hover: { enabled: false },
+      occurrencesHighlight: 'off',
+      folding: true,
+      lineNumbersMinChars: 3,
+    });
+    window.__pendingValue = null;
+
+    // 多次 reflow 是兜底:automaticLayout 在 WKWebView 早期 layout 不稳时
+    // 也会偶尔错过尺寸变化。多刷几次把任何时序问题都覆盖掉。
+    reflow();
+    [0, 50, 200, 500, 1000].forEach(function (t) { setTimeout(reflow, t); });
+
+    window.__editor.onDidChangeModelContent(function () {
+      var code = window.__editor.getValue();
+      window.webkit.messageHandlers.sourceChanged.postMessage(code);
+    });
+
+    // Tell Swift the editor is ready (and now setSource will take effect).
+    setTimeout(function () {
+      window.__editor.setScrollPosition({ scrollTop: 0 });
+      // 不主动 focus Monaco：让用户自己 tap 进入输入态。Swift 侧也不主动
+      // becomeFirstResponder，避免 WKWebView 一上来就抢焦点导致 iOS
+      // Simulator 弹出「Show Keyboard」悬浮按钮。
+      monaco.editor.setModelLanguage(window.__editor.getModel(), 'javascript');
+      window.webkit.messageHandlers.sourceChanged.postMessage('__READY__');
+    }, 0);
+  });
+</script>
+</body>
+</html>

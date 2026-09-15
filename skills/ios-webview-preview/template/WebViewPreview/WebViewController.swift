@@ -3,6 +3,7 @@ import WebKit
 
 class WebViewController: UIViewController {
     private var webView: WKWebView!
+    private var userContentController: WKUserContentController!
     private var targetURL: URL
     private var backButton: UIBarButtonItem!
     private var canGoBackObservation: NSKeyValueObservation?
@@ -38,6 +39,10 @@ class WebViewController: UIViewController {
     private func setupWebView() {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
+
+        userContentController = WKUserContentController()
+        applyUserScripts(to: userContentController)
+        config.userContentController = userContentController
 
         webView = WKWebView(frame: .zero, configuration: config)
         webView.translatesAutoresizingMaskIntoConstraints = false
@@ -97,7 +102,18 @@ class WebViewController: UIViewController {
             target: self,
             action: #selector(refreshPage)
         )
-        navigationItem.rightBarButtonItem = refreshButton
+
+        // Settings (gear) sits to the right of Refresh. SF Symbol keeps the
+        // asset catalog clean — no new PNG needed.
+        let settingsButton = UIBarButtonItem(
+            image: UIImage(systemName: "gearshape"),
+            style: .plain,
+            target: self,
+            action: #selector(openSettings)
+        )
+
+        // rightBarButtonItems is laid out right-to-left: first entry is the rightmost.
+        navigationItem.rightBarButtonItems = [settingsButton, refreshButton]
 
         // Long-press the navigation bar to edit the preview URL.
         // Held in an ivar so deinit can break the gesture's strong reference to self.
@@ -122,6 +138,45 @@ class WebViewController: UIViewController {
 
     @objc private func refreshPage() {
         webView.reloadFromOrigin()
+    }
+
+    @objc private func openSettings() {
+        let vc = SettingsViewController()
+        vc.onChange = { [weak self] in
+            self?.scriptsDidChange()
+        }
+        navigationController?.pushViewController(vc, animated: true)
+    }
+
+    /// Settings 回调用：脚本列表有变更，重新注入并 reload 当前页。
+    /// reload 会清掉 history stack —— 对调试油猴脚本是期望行为。
+    private func scriptsDidChange() {
+        injectScripts()
+        webView.reload()
+    }
+
+    /// 清空 + 按当前 ScriptStore 里的 enabled 列表重新塞回 userContentController。
+    /// 必须在主线程调用（WKUserContentController 的 API 约束；我们天然在主线程）。
+    private func injectScripts() {
+        guard let ucc = userContentController else { return }
+        ucc.removeAllUserScripts()
+        applyUserScripts(to: ucc)
+    }
+
+    private func applyUserScripts(to ucc: WKUserContentController) {
+        for script in ScriptStore.loadAll() {
+            // 用户脚本：enabled 字段就是真实状态
+            // 内置脚本：状态在 UserDefaults 里（builtin-<id>-enabled）
+            let enabled = BuiltinScripts.isBuiltin(script.id)
+                ? BuiltinScripts.isEnabled(script.id)
+                : script.enabled
+            guard enabled else { continue }
+            ucc.addUserScript(WKUserScript(
+                source: ScriptInjector.wrappedSource(script.source),
+                injectionTime: .atDocumentEnd,
+                forMainFrameOnly: false
+            ))
+        }
     }
 
     @objc private func handleNavBarLongPress(_ gesture: UILongPressGestureRecognizer) {
