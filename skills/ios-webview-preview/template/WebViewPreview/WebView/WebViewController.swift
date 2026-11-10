@@ -11,6 +11,8 @@ class WebViewController: UIViewController {
     private var titleObservation: NSKeyValueObservation?
     private var navBarLongPressGesture: UILongPressGestureRecognizer?
     private var floatingSettingsButton: UIButton?
+    private var floatingSettingsTopConstraint: NSLayoutConstraint?
+    private var floatingSettingsTrailingConstraint: NSLayoutConstraint?
     private var webViewSafeAreaTopConstraint: NSLayoutConstraint?
     private var webViewScreenTopConstraint: NSLayoutConstraint?
 
@@ -82,6 +84,8 @@ class WebViewController: UIViewController {
             navigationController?.setNavigationBarHidden(false, animated: true)
             floatingSettingsButton?.removeFromSuperview()
             floatingSettingsButton = nil
+            floatingSettingsTopConstraint = nil
+            floatingSettingsTrailingConstraint = nil
         }
         updateWebViewTopInset()
     }
@@ -202,7 +206,7 @@ class WebViewController: UIViewController {
         updateBackButtonState()
     }
 
-    /// 全屏模式下的设置入口：右上角半透明圆形悬浮按钮，避免遮挡网页内容。
+    /// 全屏模式下的设置入口：右上角半透明圆形悬浮按钮，可拖拽以避开网页内容。
     private func setupFloatingSettingsButton() {
         let button = UIButton(type: .system)
         button.translatesAutoresizingMaskIntoConstraints = false
@@ -212,15 +216,53 @@ class WebViewController: UIViewController {
         button.layer.cornerRadius = 22
         button.clipsToBounds = true
         button.addTarget(self, action: #selector(openSettings), for: .touchUpInside)
+        button.addGestureRecognizer(UIPanGestureRecognizer(
+            target: self,
+            action: #selector(handleFloatingSettingsPan(_:))
+        ))
         view.addSubview(button)
 
+        let topConstraint = button.topAnchor.constraint(
+            equalTo: view.safeAreaLayoutGuide.topAnchor,
+            constant: 12
+        )
+        let trailingConstraint = button.trailingAnchor.constraint(
+            equalTo: view.safeAreaLayoutGuide.trailingAnchor,
+            constant: -12
+        )
         NSLayoutConstraint.activate([
             button.widthAnchor.constraint(equalToConstant: 44),
             button.heightAnchor.constraint(equalToConstant: 44),
-            button.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -12),
-            button.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12)
+            trailingConstraint,
+            topConstraint
         ])
         floatingSettingsButton = button
+        floatingSettingsTopConstraint = topConstraint
+        floatingSettingsTrailingConstraint = trailingConstraint
+    }
+
+    /// 增量更新约束，并在安全区内保留 12pt 边距，防止按钮被拖出屏幕。
+    @objc private func handleFloatingSettingsPan(_ gesture: UIPanGestureRecognizer) {
+        guard gesture.state == .changed,
+              let button = floatingSettingsButton,
+              let topConstraint = floatingSettingsTopConstraint,
+              let trailingConstraint = floatingSettingsTrailingConstraint else { return }
+
+        let translation = gesture.translation(in: view)
+        let margin: CGFloat = 12
+        let safeArea = view.safeAreaLayoutGuide.layoutFrame
+        let maxTop = max(margin, safeArea.height - button.bounds.height - margin)
+        let minTrailing = min(-margin, margin + button.bounds.width - safeArea.width)
+
+        topConstraint.constant = min(
+            max(topConstraint.constant + translation.y, margin),
+            maxTop
+        )
+        trailingConstraint.constant = min(
+            max(trailingConstraint.constant - translation.x, minTrailing),
+            -margin
+        )
+        gesture.setTranslation(.zero, in: view)
     }
 
     private func loadURL() {

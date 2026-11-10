@@ -45,7 +45,7 @@ metadata:
 ## 注意事项
 
 - `Config.swift` 路径：`WebViewPreview/App/Config.swift`（重构后放在 `App/` 子目录）
-- URL 带 `dd_full_screen=true`（query 或 hash 路由均可，如 `http://localhost:3000/#/page?dd_full_screen=true`）时进入**全屏模式**：导航栏隐藏，右上角显示半透明悬浮设置按钮进入设置页；webView 顶到屏幕边缘（含刘海/状态栏区域），安全距离由前端自己处理（`viewport-fit=cover` + `env(safe-area-inset-*)`）
+- URL 带 `dd_full_screen=true`（query 或 hash 路由均可，如 `http://localhost:3000/#/page?dd_full_screen=true`）时进入**全屏模式**：导航栏隐藏，右上角显示半透明悬浮设置按钮进入设置页，按钮可在安全区内拖拽以避免遮挡网页；webView 顶到屏幕边缘（含刘海/状态栏区域），安全距离由前端自己处理（`viewport-fit=cover` + `env(safe-area-inset-*)`）
 - 模拟器里**长按导航栏标题**可以现场改 URL（全屏模式下导航栏隐藏，此入口不可用）
 - 用户脚本（`UserScripts/`）和 native 扩展（`NativeExtensions/`）的代码改动需要重新 `bash scripts/run.sh`（或单独 `build.sh` + `run.sh`）
 
