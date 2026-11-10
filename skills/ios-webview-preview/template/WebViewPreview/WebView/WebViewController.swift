@@ -10,10 +10,36 @@ class WebViewController: UIViewController {
     private var canGoBackObservation: NSKeyValueObservation?
     private var titleObservation: NSKeyValueObservation?
     private var navBarLongPressGesture: UILongPressGestureRecognizer?
+    private var floatingSettingsButton: UIButton?
+    private var webViewSafeAreaTopConstraint: NSLayoutConstraint?
+    private var webViewScreenTopConstraint: NSLayoutConstraint?
+
+    /// URL 带 `dd_full_screen=true`（query 或 hash 路由均可）时进入全屏模式：
+    /// 隐藏导航栏，改为右上角悬浮设置按钮。
+    private var isFullScreen: Bool {
+        Self.hasFullScreenParam(targetURL)
+    }
 
     init(url: URL) {
         self.targetURL = url
         super.init(nibName: nil, bundle: nil)
+    }
+
+    private static func hasFullScreenParam(_ url: URL) -> Bool {
+        func match(_ query: String?) -> Bool {
+            guard let query = query,
+                  let items = URLComponents(string: "?\(query)")?.queryItems else { return false }
+            return items.contains { $0.name == "dd_full_screen" && $0.value == "true" }
+        }
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        // 1) 普通 query：?dd_full_screen=true
+        if match(components?.query) { return true }
+        // 2) SPA hash 路由：#/page?dd_full_screen=true
+        if let fragment = components?.fragment,
+           let qIndex = fragment.firstIndex(of: "?") {
+            return match(String(fragment[fragment.index(after: qIndex)...]))
+        }
+        return false
     }
 
     required init?(coder: NSCoder) {
@@ -24,7 +50,49 @@ class WebViewController: UIViewController {
         super.viewDidLoad()
         setupWebView()
         setupNavigationBar()
+        if isFullScreen {
+            setupFloatingSettingsButton()
+        }
         loadURL()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        if isFullScreen {
+            navigationController?.setNavigationBarHidden(true, animated: animated)
+        }
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        // 推出设置页前恢复导航栏，返回本页时 viewWillAppear 会再次隐藏
+        if isFullScreen {
+            navigationController?.setNavigationBarHidden(false, animated: animated)
+        }
+    }
+
+    /// 现场改 URL 后调用：根据新 URL 是否带 dd_full_screen=true 切换全屏/普通模式。
+    private func applyScreenMode() {
+        if isFullScreen {
+            navigationController?.setNavigationBarHidden(true, animated: true)
+            if floatingSettingsButton == nil {
+                setupFloatingSettingsButton()
+            }
+        } else {
+            navigationController?.setNavigationBarHidden(false, animated: true)
+            floatingSettingsButton?.removeFromSuperview()
+            floatingSettingsButton = nil
+        }
+        updateWebViewTopInset()
+    }
+
+    /// 全屏模式：webView 顶到屏幕边缘，且关掉 UIScrollView 的自动安全区
+    /// 内边距，把刘海/状态栏区域完全交给前端（env(safe-area-inset-*) 会
+    /// 返回真实值）。普通模式：顶到 safeArea，保持系统自动内边距。
+    private func updateWebViewTopInset() {
+        webViewSafeAreaTopConstraint?.isActive = !isFullScreen
+        webViewScreenTopConstraint?.isActive = isFullScreen
+        webView.scrollView.contentInsetAdjustmentBehavior = isFullScreen ? .never : .automatic
     }
 
     deinit {
@@ -61,12 +129,18 @@ class WebViewController: UIViewController {
 
         view.addSubview(webView)
 
+        // 顶部约束两套：普通模式顶到 safeArea（避开导航栏），全屏模式顶到屏幕
+        // 边缘（含刘海/状态栏区域），安全距离由前端 viewport-fit=cover +
+        // env(safe-area-inset-*) 自行处理。applyScreenMode() 负责切换。
+        webViewSafeAreaTopConstraint = webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor)
+        webViewScreenTopConstraint = webView.topAnchor.constraint(equalTo: view.topAnchor)
+
         NSLayoutConstraint.activate([
-            webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             webView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
+        updateWebViewTopInset()
 
         // Use NSKeyValueObservation instead of raw KVO to avoid the nil-context
         // super-forward crash when the web view fires keyPaths we don't handle.
@@ -126,6 +200,27 @@ class WebViewController: UIViewController {
         navBarLongPressGesture = gesture
 
         updateBackButtonState()
+    }
+
+    /// 全屏模式下的设置入口：右上角半透明圆形悬浮按钮，避免遮挡网页内容。
+    private func setupFloatingSettingsButton() {
+        let button = UIButton(type: .system)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.setImage(UIImage(systemName: "gearshape"), for: .normal)
+        button.tintColor = .white
+        button.backgroundColor = UIColor.black.withAlphaComponent(0.35)
+        button.layer.cornerRadius = 22
+        button.clipsToBounds = true
+        button.addTarget(self, action: #selector(openSettings), for: .touchUpInside)
+        view.addSubview(button)
+
+        NSLayoutConstraint.activate([
+            button.widthAnchor.constraint(equalToConstant: 44),
+            button.heightAnchor.constraint(equalToConstant: 44),
+            button.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -12),
+            button.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12)
+        ])
+        floatingSettingsButton = button
     }
 
     private func loadURL() {
@@ -253,6 +348,7 @@ class WebViewController: UIViewController {
             }
             self.targetURL = url
             AppConfig.targetURL = text
+            self.applyScreenMode()
             self.loadURL()
         })
         present(alert, animated: true)

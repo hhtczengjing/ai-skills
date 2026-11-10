@@ -25,7 +25,7 @@ import Foundation
 
 enum AppConfig {
     // 这个 URL 会被 skill 脚本动态替换
-    static let targetURL = "$NEW_URL"
+    static var targetURL = "$NEW_URL"
 }
 EOF
 
