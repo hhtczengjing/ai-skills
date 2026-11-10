@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 一键跑示例工程：
-#   1. 项目不存在 → 拷贝 template → ~/.ios-webview-preview/，xcodegen 生成
+#   1. 同步 template → ~/.ios-webview-preview/，xcodegen 生成
 #   2. xcodebuild 编译
 #   3. simctl install（uninstall 清空沙箱保证从干净状态起）
 #   4. 把 template/example/*.user.js 拷贝到沙箱 Documents/scripts/ 并注册到 index.json
@@ -39,12 +39,11 @@ fi
 echo "==> Simulator: $DEVICE_UDID"
 echo "==> Example scripts dir: $EXAMPLE_DIR"
 
-# ---------- 1. 项目初始化（一次性） ----------
-if [ ! -d "$WORK_DIR/WebViewPreview" ]; then
-    echo "==> init: 拷贝 template → $WORK_DIR"
-    mkdir -p "$WORK_DIR"
-    cp -r "$TEMPLATE_DIR"/* "$WORK_DIR/"
-fi
+# ---------- 1. 同步模板 ----------
+# 每次都覆盖运行工程，确保已有工作目录也能拿到最新 Swift / Resources 改动。
+echo "==> sync: 拷贝 template → $WORK_DIR"
+mkdir -p "$WORK_DIR"
+cp -R "$TEMPLATE_DIR"/. "$WORK_DIR"/
 
 # 每次都 regenerate xcodeproj —— 改了 project.yml / 加新 Swift 文件 / 改了
 # Resources 都要重新生成。xcodegen 跑 < 1s，比手动维护 xcodeproj 省事。

@@ -216,6 +216,8 @@ class WebViewController: UIViewController {
         button.layer.cornerRadius = 22
         button.clipsToBounds = true
         button.addTarget(self, action: #selector(openSettings), for: .touchUpInside)
+        button.accessibilityIdentifier = "fullscreenSettingsButton"
+        button.accessibilityLabel = "设置"
         button.addGestureRecognizer(UIPanGestureRecognizer(
             target: self,
             action: #selector(handleFloatingSettingsPan(_:))
@@ -241,28 +243,44 @@ class WebViewController: UIViewController {
         floatingSettingsTrailingConstraint = trailingConstraint
     }
 
-    /// 增量更新约束，并在安全区内保留 12pt 边距，防止按钮被拖出屏幕。
+    /// 拖拽时限制在安全区内并保留 12pt 边距；松手后吸附到较近的左右边缘。
     @objc private func handleFloatingSettingsPan(_ gesture: UIPanGestureRecognizer) {
-        guard gesture.state == .changed,
-              let button = floatingSettingsButton,
+        guard let button = floatingSettingsButton,
               let topConstraint = floatingSettingsTopConstraint,
               let trailingConstraint = floatingSettingsTrailingConstraint else { return }
 
-        let translation = gesture.translation(in: view)
         let margin: CGFloat = 12
         let safeArea = view.safeAreaLayoutGuide.layoutFrame
-        let maxTop = max(margin, safeArea.height - button.bounds.height - margin)
         let minTrailing = min(-margin, margin + button.bounds.width - safeArea.width)
+        let maxTrailing = -margin
 
-        topConstraint.constant = min(
-            max(topConstraint.constant + translation.y, margin),
-            maxTop
-        )
-        trailingConstraint.constant = min(
-            max(trailingConstraint.constant - translation.x, minTrailing),
-            -margin
-        )
-        gesture.setTranslation(.zero, in: view)
+        switch gesture.state {
+        case .changed:
+            let translation = gesture.translation(in: view)
+            let maxTop = max(margin, safeArea.height - button.bounds.height - margin)
+            topConstraint.constant = min(
+                max(topConstraint.constant + translation.y, margin),
+                maxTop
+            )
+            trailingConstraint.constant = min(
+                max(trailingConstraint.constant + translation.x, minTrailing),
+                maxTrailing
+            )
+            gesture.setTranslation(.zero, in: view)
+        case .ended, .cancelled:
+            let midpoint = (minTrailing + maxTrailing) / 2
+            let target = trailingConstraint.constant < midpoint ? minTrailing : maxTrailing
+            UIView.animate(
+                withDuration: 0.25,
+                delay: 0,
+                options: [.curveEaseOut, .allowUserInteraction, .beginFromCurrentState]
+            ) {
+                trailingConstraint.constant = target
+                self.view.layoutIfNeeded()
+            }
+        default:
+            break
+        }
     }
 
     private func loadURL() {
